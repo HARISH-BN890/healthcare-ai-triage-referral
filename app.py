@@ -1,6 +1,10 @@
 
 import streamlit as st
 
+from bayesian_model import bayes_posterior, uncertainty_label
+from decision_support import calculate_expected_utility, choose_best_action
+from referral_routing import find_referral_route
+
 st.set_page_config(
     page_title="Rural Healthcare AI",
     page_icon="🏥",
@@ -15,9 +19,10 @@ st.write(
     "for rural primary healthcare workers in India."
 )
 
-st.info(
-    "Educational demonstration only. This application "
-    "is not a clinically validated diagnostic tool."
+st.warning(
+    "Educational demonstration only. Outputs are simulated, "
+    "not clinical advice or a validated diagnostic tool. "
+    "Do not use them to make real patient-care decisions."
 )
 
 st.divider()
@@ -76,12 +81,21 @@ if "assessment" in st.session_state:
     b.metric("Systolic BP", f'{patient["systolic_bp"]} mmHg')
     c.metric("Blood sugar", f'{patient["blood_sugar"]} mg/dL')
 
-    st.write("**Symptoms:**", ", ".join(patient["symptoms"]) or "None selected")
+    st.write(
+        "**Symptoms:**",
+        ", ".join(patient["symptoms"]) or "None selected"
+    )
     st.write("**Medical history:**", patient["history"])
 
-    st.warning(
-        "AI risk estimation and referral recommendations "
-        "will be added in later steps."
+    st.divider()
+    st.header("AI Module Integration")
+
+    st.info(
+        "The modules are imported below. Their outputs will only "
+        "be displayed after their function interfaces and assumptions "
+        "have been verified."
     )
 
-st.caption("AI Healthcare Case Study | GITAM University")
+    st.caption(
+        "AI Healthcare Case Study | GITAM University"
+    )
