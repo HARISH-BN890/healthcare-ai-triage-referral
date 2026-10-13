@@ -1,7 +1,7 @@
 
 import streamlit as st
 
-from bayesian_model import bayes_posterior, uncertainty_label
+from bayesian_model import calculate_probability, uncertainty_label
 from decision_support import calculate_expected_utility, choose_best_action
 from referral_routing import find_referral_route
 
@@ -20,9 +20,9 @@ st.write(
 )
 
 st.warning(
-    "Educational demonstration only. Outputs are simulated, "
-    "not clinical advice or a validated diagnostic tool. "
-    "Do not use them to make real patient-care decisions."
+    "Educational demonstration only. Probabilities and utilities "
+    "are illustrative, not clinically validated. Do not use this "
+    "prototype to make real patient-care decisions."
 )
 
 st.divider()
@@ -88,14 +88,79 @@ if "assessment" in st.session_state:
     st.write("**Medical history:**", patient["history"])
 
     st.divider()
-    st.header("AI Module Integration")
+    st.header("Illustrative AI Module Demonstrations")
+
+    # Example probabilities are fixed for demonstration.
+    # They are NOT derived from the patient's measurements.
+    st.subheader("1. Bayesian probability")
+
+    prior = 0.10
+    sensitivity = 0.80
+    specificity = 0.90
+
+    posterior = calculate_probability(
+        prior, sensitivity, specificity, positive=True
+    )
+
+    st.metric("Example posterior probability", f"{posterior:.2%}")
+    st.write("Probability category:", uncertainty_label(posterior))
+    st.caption(
+        "This example uses assumed values; it does not estimate "
+        "this patient's medical risk."
+    )
+
+    st.subheader("2. Expected utility")
+
+    actions = {
+        "Routine follow-up": [(0.8, 10), (0.2, -20)],
+        "Clinical assessment": [(0.9, 8), (0.1, -5)],
+        "Urgent clinical review": [(0.95, 6), (0.05, -2)]
+    }
+
+    best_action, scores = choose_best_action(actions)
+
+    for action, score in scores.items():
+        st.write(f"**{action}:** {score:.2f}")
 
     st.info(
-        "The modules are imported below. Their outputs will only "
-        "be displayed after their function interfaces and assumptions "
-        "have been verified."
+        f"Highest-utility action in the hypothetical example: "
+        f"{best_action}"
+    )
+    st.caption(
+        "These hypothetical utilities are not medical recommendations."
     )
 
-    st.caption(
-        "AI Healthcare Case Study | GITAM University"
+    st.subheader("3. Referral route demonstration")
+
+    graph = {
+        "Village Clinic": {
+            "Community Health Centre": 3,
+            "Town Hospital": 10
+        },
+        "Community Health Centre": {
+            "Village Clinic": 3,
+            "Town Hospital": 4
+        },
+        "Town Hospital": {
+            "Village Clinic": 10,
+            "Community Health Centre": 4
+        }
+    }
+
+    path, cost = find_referral_route(
+        graph, "Village Clinic", "Town Hospital"
     )
+
+    if path:
+        st.write("**Example route:**", " → ".join(path))
+        st.write("**Simulated route cost:**", cost)
+    else:
+        st.write("No route available in the example graph.")
+
+    st.caption(
+        "The route uses a small, simulated graph and does not "
+        "represent real hospitals, roads, or travel times."
+    )
+
+st.divider()
+st.caption("AI Healthcare Case Study | GITAM University")
