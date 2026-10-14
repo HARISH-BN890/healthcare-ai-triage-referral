@@ -423,7 +423,7 @@ with tab2:
                                     "RuralHealthcareAIStudentProject/1.0"
                                 )
                             },
-                            timeout=45,
+                            timeout=90,
                         )
 
                         response.raise_for_status()
