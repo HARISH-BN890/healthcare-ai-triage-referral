@@ -4,8 +4,6 @@ import pandas as pd
 import folium
 
 from streamlit_folium import st_folium
-from bayesian_model import calculate_probability, uncertainty_label
-from decision_support import calculate_expected_utility, choose_best_action
 
 
 # =========================================================
@@ -140,29 +138,46 @@ with tab1:
 
         with col2:
 
-            symptoms = st.multiselect(
-                "Symptoms",
-                [
-                    "Chest discomfort",
-                    "Breathlessness",
-                    "Excessive thirst",
-                    "Frequent urination",
-                    "Dizziness",
-                    "Fever",
-                    "Severe headache",
-                ],
+            symptom_options = [
+                "Chest discomfort",
+                "Breathlessness",
+                "Excessive thirst",
+                "Frequent urination",
+                "Dizziness",
+                "Fever",
+                "Severe headache",
+                "Other (describe below)",
+            ]
+            selected_symptoms = st.multiselect(
+                "Symptoms (select all that apply)",
+                symptom_options,
+                help="Choose Other to enter a symptom that is not listed.",
             )
+            other_symptoms = ""
+            if "Other (describe below)" in selected_symptoms:
+                other_symptoms = st.text_input(
+                    "Describe other symptoms",
+                    placeholder="Type symptoms here",
+                    max_chars=500,
+                )
 
-            history = st.selectbox(
-                "Medical history",
-                [
-                    "Not known",
-                    "Hypertension",
-                    "Diabetes",
-                    "Heart disease",
-                    "Family history of heart disease",
-                ],
-            )
+            history_options = [
+                "Not known",
+                "Hypertension",
+                "Diabetes",
+                "Heart disease",
+                "Family history of heart disease",
+                "Other (describe below)",
+            ]
+            history = st.selectbox("Medical history", history_options)
+            other_history = ""
+            if history == "Other (describe below)":
+                other_history = st.text_area(
+                    "Describe other medical history",
+                    placeholder="Type any other known medical history here",
+                    max_chars=1000,
+                    height=90,
+                )
 
         submitted = st.form_submit_button(
             "Save Patient Assessment",
@@ -175,8 +190,15 @@ with tab1:
             "age": age,
             "systolic_bp": systolic_bp,
             "blood_sugar": blood_sugar,
-            "symptoms": symptoms,
-            "history": history,
+            "symptoms": [
+                symptom for symptom in selected_symptoms
+                if symptom != "Other (describe below)"
+            ] + ([f"Other: {other_symptoms.strip()}"] if other_symptoms.strip() else []),
+            "history": (
+                f"Other: {other_history.strip()}"
+                if history == "Other (describe below)" and other_history.strip()
+                else history
+            ),
         }
 
         st.success(
@@ -569,7 +591,7 @@ with tab2:
                         "Address",
                     ]
                 ],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
@@ -634,208 +656,132 @@ with tab2:
 # =========================================================
 
 with tab3:
-
     st.header("Referral Route Planner")
-
     st.write(
         "Estimate a road route between your searched location "
         "and a selected healthcare facility."
     )
 
     facilities = st.session_state.get("facilities", [])
+    location = st.session_state.get("location")
 
-    if (
-        not facilities
-        or "location" not in st.session_state
-    ):
-
+    if not facilities or not location:
         st.info(
             "First open Find Healthcare, search for a location, "
             "and load nearby facilities."
         )
-
     else:
-
         labels = [
-            (
-                f'{facility["Facility"]} — '
-                f'{facility["Type"]} '
-                f'({facility["Latitude"]:.4f}, '
-                f'{facility["Longitude"]:.4f})'
-            )
+            f'{facility["Facility"]} — {facility["Type"]} '
+            f'({facility["Latitude"]:.4f}, {facility["Longitude"]:.4f})'
             for facility in facilities
         ]
+        selected_label = st.selectbox("Choose a destination", labels)
+        selected_index = labels.index(selected_label)
 
-        selected_label = st.selectbox(
-            "Choose a destination",
-            labels,
+        # Drop a saved route if the user changes the destination or location.
+        saved_route = st.session_state.get("route_result")
+        route_signature = (
+            location["lat"], location["lon"], selected_label
         )
+        if saved_route and saved_route.get("signature") != route_signature:
+            st.session_state.pop("route_result", None)
+            saved_route = None
 
-        if st.button(
-            "Calculate Road Route",
-            type="primary",
-        ):
-
-            destination = facilities[
-                labels.index(selected_label)
-            ]
-
-            location = st.session_state["location"]
-
+        if st.button("Calculate Road Route", type="primary", key="calculate_road_route"):
+            destination = facilities[selected_index]
             route_url = (
                 "https://router.project-osrm.org/route/v1/driving/"
                 f'{location["lon"]},{location["lat"]};'
-                f'{destination["Longitude"]},'
-                f'{destination["Latitude"]}'
+                f'{destination["Longitude"]},{destination["Latitude"]}'
             )
 
             try:
-
-                with st.spinner(
-                    "Calculating the estimated road route..."
-                ):
-
+                with st.spinner("Calculating the estimated road route..."):
                     response = requests.get(
                         route_url,
-                        params={
-                            "overview": "full",
-                            "geometries": "geojson",
-                        },
+                        params={"overview": "full", "geometries": "geojson"},
+                        headers={"User-Agent": "RuralHealthcareAIStudentProject/1.0"},
                         timeout=30,
                     )
-
                     response.raise_for_status()
-
                     route_data = response.json()
 
-                if (
-                    route_data.get("code") == "Ok"
-                    and route_data.get("routes")
-                ):
-
+                if route_data.get("code") == "Ok" and route_data.get("routes"):
                     route = route_data["routes"][0]
-
-                    distance_km = (
-                        route["distance"] / 1000
-                    )
-
-                    duration_min = (
-                        route["duration"] / 60
-                    )
-
-                    col1, col2 = st.columns(2)
-
-                    col1.metric(
-                        "Estimated road distance",
-                        f"{distance_km:.1f} km",
-                    )
-
-                    col2.metric(
-                        "Estimated driving time",
-                        f"{duration_min:.0f} min",
-                    )
-
-                    st.write(
-                        "**Destination:**",
-                        destination["Facility"],
-                    )
-
-                    route_map = folium.Map(
-                        location=[
-                            location["lat"],
-                            location["lon"],
-                        ],
-                        zoom_start=10,
-                    )
-
                     coordinates = [
                         [point[1], point[0]]
-                        for point in route[
-                            "geometry"
-                        ]["coordinates"]
+                        for point in route["geometry"]["coordinates"]
                     ]
-
-                    folium.PolyLine(
-                        coordinates,
-                        color="blue",
-                        weight=5,
-                        tooltip="Estimated road route",
-                    ).add_to(route_map)
-
-                    folium.Marker(
-                        [
-                            location["lat"],
-                            location["lon"],
-                        ],
-                        tooltip="Starting location",
-                        popup=location["name"],
-                        icon=folium.Icon(
-                            color="green",
-                            icon="home",
-                        ),
-                    ).add_to(route_map)
-
-                    folium.Marker(
-                        [
-                            destination["Latitude"],
-                            destination["Longitude"],
-                        ],
-                        tooltip=destination["Facility"],
-                        popup=destination["Facility"],
-                        icon=folium.Icon(
-                            color="red",
-                            icon="plus-sign",
-                        ),
-                    ).add_to(route_map)
-
-                    st.subheader("Estimated Road Route")
-
-                    st_folium(
-    route_map,
-    height=450,
-    use_container_width=True,
-    key="route_map",
-)
-
-                    st.caption(
-                        "Route estimates depend on OpenStreetMap road "
-                        "data and the public routing service. They do "
-                        "not account for live traffic, road closures, "
-                        "ambulance availability, or whether a facility "
-                        "can accept a patient."
-                    )
-
+                    if not coordinates:
+                        st.error("The routing service returned an empty route. Try another destination.")
+                        st.session_state.pop("route_result", None)
+                    else:
+                        st.session_state["route_result"] = {
+                            "signature": route_signature,
+                            "destination": destination.copy(),
+                            "location": location.copy(),
+                            "distance_km": route["distance"] / 1000,
+                            "duration_min": route["duration"] / 60,
+                            "coordinates": coordinates,
+                        }
+                        st.success("Route calculated. The route will remain visible while you use this session.")
                 else:
-
-                    st.error(
-                        "No road route was returned. Try another "
-                        "destination or check the location."
-                    )
+                    st.session_state.pop("route_result", None)
+                    st.error("No road route was returned. Try another destination or check the location.")
+                    st.caption(f'Response code: {route_data.get("code", "Unknown")}.')
 
             except requests.RequestException as error:
+                st.error("The routing service is currently unavailable. Please try again in a moment.")
+                st.caption(f"Technical details: {type(error).__name__}.")
+            except (ValueError, KeyError, IndexError, TypeError) as error:
+                st.error("The routing service returned an unexpected response.")
+                st.caption(f"Technical details: {type(error).__name__}.")
+                st.session_state.pop("route_result", None)
 
-                st.error(
-                    "The routing service is currently unavailable."
-                )
+        # Render saved route OUTSIDE the button block. Streamlit reruns the
+        # script after map interaction; saving this in session_state prevents
+        # the route from vanishing on that rerun.
+        saved_route = st.session_state.get("route_result")
+        if saved_route and saved_route.get("signature") == route_signature:
+            route_location = saved_route["location"]
+            destination = saved_route["destination"]
 
-                st.caption(
-                    f"Technical details: {type(error).__name__}."
-                )
+            col1, col2 = st.columns(2)
+            col1.metric("Estimated road distance", f'{saved_route["distance_km"]:.1f} km')
+            col2.metric("Estimated driving time", f'{saved_route["duration_min"]:.0f} min')
+            st.write("**Destination:**", destination["Facility"])
 
-            except (
-                ValueError,
-                KeyError,
-                IndexError,
-                TypeError,
-            ) as error:
+            route_map = folium.Map(
+                location=[route_location["lat"], route_location["lon"]],
+                zoom_start=10,
+            )
+            folium.PolyLine(
+                saved_route["coordinates"],
+                color="blue",
+                weight=5,
+                tooltip="Estimated road route",
+            ).add_to(route_map)
+            folium.Marker(
+                [route_location["lat"], route_location["lon"]],
+                tooltip="Starting location",
+                popup=route_location["name"],
+                icon=folium.Icon(color="green", icon="home"),
+            ).add_to(route_map)
+            folium.Marker(
+                [destination["Latitude"], destination["Longitude"]],
+                tooltip=destination["Facility"],
+                popup=destination["Facility"],
+                icon=folium.Icon(color="red", icon="plus-sign"),
+            ).add_to(route_map)
 
-                st.error(
-                    "The routing service returned an unexpected response."
-                )
-
-                st.caption(
-                    f"Technical details: {type(error).__name__}."
-                )
+            st.subheader("Estimated Road Route")
+            st_folium(route_map, width=None, height=450, key="route_map_persistent")
+            st.caption(
+                "Route estimates depend on OpenStreetMap road data and the public routing service. "
+                "They do not account for live traffic, road closures, ambulance availability, "
+                "or whether a facility can accept a patient. For emergencies, contact local emergency services."
+            )
 
 
 # =========================================================
