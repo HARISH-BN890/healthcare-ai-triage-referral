@@ -791,11 +791,11 @@ with tab3:
                     st.subheader("Estimated Road Route")
 
                     st_folium(
-                        route_map,
-                        width=None,
-                        height=450,
-                        key="route_map",
-                    )
+    route_map,
+    height=450,
+    use_container_width=True,
+    key="route_map",
+)
 
                     st.caption(
                         "Route estimates depend on OpenStreetMap road "
